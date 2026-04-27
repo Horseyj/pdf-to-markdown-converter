@@ -18,7 +18,7 @@
 
 ## Working Directory
 
-All paths in this plan are relative to: `/home/jhorsey/repos/automations/pdf-to-md-converter/`
+All paths in this plan are relative to: `/home/jhorsey/repos/automations/pdf-to-markdown-converter/`
 
 The repo has been initialized with one commit (the design spec). Run all commands from this directory unless otherwise noted.
 
@@ -27,7 +27,7 @@ The repo has been initialized with one commit (the design spec). Run all command
 ## File Structure (locked before tasks begin)
 
 ```
-pdf-to-md-converter/
+pdf-to-markdown-converter/
 ├── README.md                        # Task 12
 ├── LICENSE                          # Task 1 (MIT)
 ├── pyproject.toml                   # Task 1
@@ -137,9 +137,9 @@ dev = [
 pdf2md = "pdf2md.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/Horseyj/pdf-to-md-converter"
-Repository = "https://github.com/Horseyj/pdf-to-md-converter"
-Issues = "https://github.com/Horseyj/pdf-to-md-converter/issues"
+Homepage = "https://github.com/Horseyj/pdf-to-markdown-converter"
+Repository = "https://github.com/Horseyj/pdf-to-markdown-converter"
+Issues = "https://github.com/Horseyj/pdf-to-markdown-converter/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -1504,8 +1504,8 @@ Convert PDFs to clean markdown using [docling](https://github.com/docling-projec
 Requires Python 3.10 or newer.
 
 ```bash
-git clone https://github.com/Horseyj/pdf-to-md-converter.git
-cd pdf-to-md-converter
+git clone https://github.com/Horseyj/pdf-to-markdown-converter.git
+cd pdf-to-markdown-converter
 make install-cpu     # for laptops without an NVIDIA GPU (~200MB)
 # or:
 make install         # default; pulls GPU PyTorch wheels (~2GB)
@@ -1695,12 +1695,12 @@ This task is half manual: run pdf2md on a real PDF the user has on hand, eyeball
 
 - [ ] **Step 1: Create an empty private/public repo on GitHub**
 
-User action (does not require code changes). Suggested name: `pdf-to-md-converter`. Either privacy setting is fine; can be flipped to public later.
+User action (does not require code changes). Suggested name: `pdf-to-markdown-converter`. Either privacy setting is fine; can be flipped to public later.
 
 - [ ] **Step 2: Add the GitHub remote and push**
 
 ```bash
-git remote add origin git@github.com:Horseyj/pdf-to-md-converter.git
+git remote add origin git@github.com:Horseyj/pdf-to-markdown-converter.git
 git push -u origin main
 ```
 
@@ -1732,7 +1732,7 @@ If output looks clean: proceed.
 
 - [ ] **Step 6: Verify CI passed on GitHub**
 
-Open `https://github.com/Horseyj/pdf-to-md-converter/actions` and confirm the most recent workflow run is green.
+Open `https://github.com/Horseyj/pdf-to-markdown-converter/actions` and confirm the most recent workflow run is green.
 
 If CI failed: investigate the failure, fix, push, re-check.
 

@@ -54,7 +54,7 @@ Single Python package, one conversion engine, one CLI entry point with two run m
 ## Repo Layout
 
 ```
-pdf-to-md-converter/
+pdf-to-markdown-converter/
 ├── README.md                    # what it does, install, usage, limitations, engine credit
 ├── LICENSE                      # MIT
 ├── pyproject.toml               # package metadata, deps, entry point

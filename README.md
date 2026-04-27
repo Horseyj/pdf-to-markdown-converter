@@ -7,8 +7,8 @@ Convert PDFs to clean markdown using [docling](https://github.com/docling-projec
 Requires Python 3.10 or newer.
 
 ```bash
-git clone https://github.com/Horseyj/pdf-to-md-converter.git
-cd pdf-to-md-converter
+git clone https://github.com/Horseyj/pdf-to-markdown-converter.git
+cd pdf-to-markdown-converter
 make install-cpu     # for laptops without an NVIDIA GPU (~200MB)
 # or:
 make install         # default; pulls GPU PyTorch wheels (~2GB)

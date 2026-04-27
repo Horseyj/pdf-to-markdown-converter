@@ -33,9 +33,9 @@ dev = [
 pdf2md = "pdf2md.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/Horseyj/pdf-to-md-converter"
-Repository = "https://github.com/Horseyj/pdf-to-md-converter"
-Issues = "https://github.com/Horseyj/pdf-to-md-converter/issues"
+Homepage = "https://github.com/Horseyj/pdf-to-markdown-converter"
+Repository = "https://github.com/Horseyj/pdf-to-markdown-converter"
+Issues = "https://github.com/Horseyj/pdf-to-markdown-converter/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
