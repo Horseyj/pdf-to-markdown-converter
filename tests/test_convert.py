@@ -64,3 +64,18 @@ def test_convert_one_output_is_deterministic(tmp_path):
     a = (tmp_path / "a" / "sample" / "sample.md").read_bytes()
     b = (tmp_path / "b" / "sample" / "sample.md").read_bytes()
     assert a == b
+
+
+def test_convert_one_with_images_does_not_error(tmp_path):
+    """The fixture has no images, but the with_images=True path must not error."""
+    result = convert_one(FIXTURE, tmp_path, with_images=True)
+    assert result.status == ConversionStatus.SUCCESS
+
+
+def test_convert_one_no_images_suppresses_sidecar(tmp_path):
+    convert_one(FIXTURE, tmp_path, with_images=False)
+    out_dir = tmp_path / "sample"
+    artifacts = out_dir / "sample_artifacts"
+    # Either the artifacts folder doesn't exist, or it's empty.
+    if artifacts.exists():
+        assert not any(artifacts.iterdir()), f"expected no images, found {list(artifacts.iterdir())}"
