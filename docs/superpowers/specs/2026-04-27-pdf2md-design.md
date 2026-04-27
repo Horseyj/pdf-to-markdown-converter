@@ -24,7 +24,7 @@ A lean, high-quality, single-purpose Python utility that converts arbitrary PDFs
 - Concurrent multi-PDF conversion (sequential is simpler and good enough overnight)
 - Resume mid-PDF (file-level skip-existing is sufficient)
 - Other input formats (DOCX, PPTX, EPUB) — name says `pdf2md`
-- Python <3.11 support
+- Python <3.10 support — docling's own minimum is 3.10, so we match it. Originally specced 3.11 floor; lowered during implementation because the dev machine ships 3.10 and the 3.11 features the project would use are nil.
 - Public-quality test matrix across diverse PDF types
 
 These are explicitly out of scope. Do not build them.
@@ -263,7 +263,7 @@ No emojis. No "features" marketing fluff.
 
 GitHub Actions workflow at `.github/workflows/test.yml`:
 - Runs on push to any branch
-- Python 3.11 and 3.12 matrix
+- Python 3.10, 3.11, and 3.12 matrix
 - Install deps, run `pytest`
 - Fail on test failures
 

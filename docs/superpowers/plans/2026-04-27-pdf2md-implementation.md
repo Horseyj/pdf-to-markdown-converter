@@ -7,7 +7,7 @@
 **Architecture:** Single Python package with one CLI entry point and two run modes (single-PDF and batch). Wraps the [docling](https://github.com/docling-project/docling) library (IBM Research) configured for CPU mode with OCR enabled and TableFormer in ACCURATE mode. Per-PDF self-contained output folder containing a markdown file plus a sidecar artifacts folder for extracted images. Discovery is non-recursive; per-PDF errors do not abort the batch.
 
 **Tech Stack:**
-- Python 3.11+
+- Python 3.10+
 - [docling](https://pypi.org/project/docling/) — PDF → markdown conversion engine
 - argparse (stdlib) — CLI
 - pytest — testing
@@ -111,12 +111,13 @@ name = "pdf2md"
 version = "0.1.0"
 description = "Convert PDFs to clean markdown using docling. Single command, batch and single-PDF modes, self-contained per-PDF output."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 license = { file = "LICENSE" }
 authors = [{ name = "James H" }]
 keywords = ["pdf", "markdown", "docling", "ocr", "document-conversion"]
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "License :: OSI Approved :: MIT License",
@@ -1500,7 +1501,7 @@ Convert PDFs to clean markdown using [docling](https://github.com/docling-projec
 
 ## Install
 
-Requires Python 3.11 or newer.
+Requires Python 3.10 or newer.
 
 ```bash
 git clone https://github.com/Horseyj/pdf-to-md-converter.git
@@ -1628,7 +1629,7 @@ EOF
 **Files:**
 - Create: `.github/workflows/test.yml`
 
-Run pytest on every push, on Python 3.11 and 3.12. Use the CPU-wheels install path (CI machines have no GPU).
+Run pytest on every push, on Python 3.10, 3.11, and 3.12. Use the CPU-wheels install path (CI machines have no GPU).
 
 - [ ] **Step 1: Create the workflow file**
 
@@ -1647,7 +1648,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
 
@@ -1674,7 +1675,7 @@ git add .github/workflows/test.yml
 git commit -m "$(cat <<'EOF'
 Add GitHub Actions CI workflow
 
-Runs pytest on push and PR, Python 3.11 and 3.12, Ubuntu latest.
+Runs pytest on push and PR, Python 3.10, 3.11, and 3.12, Ubuntu latest.
 Installs with CPU PyTorch wheels because CI runners have no GPU.
 
 Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
