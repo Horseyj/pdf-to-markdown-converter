@@ -4,8 +4,16 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 from pdf2md import __version__
+from pdf2md.convert import (
+    BatchSummary,
+    ConversionResult,
+    ConversionStatus,
+    convert_batch,
+    convert_one,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -38,12 +46,82 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _format_progress(i: int, total: int, result: ConversionResult) -> str:
+    if result.status == ConversionStatus.SUCCESS:
+        return f"[{i}/{total}] {result.source.name} -> {result.output_md.parent}/ ({result.elapsed_s:.1f}s, {result.n_pages} pages)"
+    if result.status == ConversionStatus.SKIPPED:
+        return f"[{i}/{total}] SKIP {result.source.name} (output exists, use --force to overwrite)"
+    return f"[{i}/{total}] FAILED {result.source.name}: {result.error}"
+
+
+def _print_progress(i: int, total: int, result: ConversionResult) -> None:
+    line = _format_progress(i, total, result)
+    stream = sys.stderr if result.status == ConversionStatus.FAILED else sys.stdout
+    print(line, file=stream)
+
+
+def _print_summary(summary: BatchSummary, out_dir: Path) -> None:
+    print(
+        f"\n{summary.succeeded} succeeded, {summary.failed} failed, {summary.skipped} skipped"
+    )
+    mins, secs = divmod(int(summary.elapsed_s), 60)
+    print(f"Total time: {mins}m {secs}s")
+    print(f"Output: {out_dir}/")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    # Wiring to convert.py happens in Task 11.
-    print("pdf2md: CLI not yet wired (Task 11). Args parsed:", vars(args), file=sys.stderr)
-    return 2
+
+    out_dir = Path(args.out_dir)
+
+    # Resolve mode: positional input takes precedence over --in.
+    positional = Path(args.input) if args.input else None
+
+    if positional is not None and positional.is_file():
+        # Single-PDF mode.
+        try:
+            result = convert_one(
+                positional,
+                out_dir,
+                fast_tables=args.fast,
+                with_images=args.with_images,
+            )
+        except Exception as exc:
+            print(f"FAILED {positional.name}: {type(exc).__name__}: {exc}", file=sys.stderr)
+            return 1
+        print(_format_progress(1, 1, result))
+        return 0 if result.status == ConversionStatus.SUCCESS else 1
+
+    # Batch mode. Source dir = positional (if directory) else --in.
+    if positional is not None and positional.is_dir():
+        in_dir = positional
+    elif positional is not None:
+        print(f"pdf2md: input not found: {positional}", file=sys.stderr)
+        return 2
+    else:
+        in_dir = Path(args.in_dir)
+
+    if not in_dir.is_dir():
+        print(f"pdf2md: input directory not found: {in_dir}", file=sys.stderr)
+        return 2
+
+    try:
+        summary = convert_batch(
+            in_dir,
+            out_dir,
+            force=args.force,
+            strict=args.strict,
+            fast_tables=args.fast,
+            with_images=args.with_images,
+            on_progress=_print_progress,
+        )
+    except Exception as exc:
+        print(f"pdf2md: batch aborted: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+
+    _print_summary(summary, out_dir)
+    return 0 if summary.failed == 0 else 1
 
 
 if __name__ == "__main__":
