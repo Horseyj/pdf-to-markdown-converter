@@ -7,6 +7,7 @@ is importable as a library.
 
 from __future__ import annotations
 
+import importlib.metadata
 import time
 from dataclasses import dataclass, field
 from enum import Enum
@@ -100,6 +101,17 @@ def convert_one(
 
     image_mode = ImageRefMode.REFERENCED if with_images else ImageRefMode.PLACEHOLDER
     doc.save_as_markdown(out_md, image_mode=image_mode)
+
+    # Prepend provenance header. Order: source, pages, extractor.
+    docling_version = importlib.metadata.version("docling")
+    header = (
+        f"<!-- source: {source.name} -->\n"
+        f"<!-- pages: {n_pages} -->\n"
+        f"<!-- extractor: docling {docling_version} -->\n"
+        f"\n"
+    )
+    body = out_md.read_text()
+    out_md.write_text(header + body)
 
     elapsed = time.monotonic() - started
     return ConversionResult(

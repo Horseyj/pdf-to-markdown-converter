@@ -1,5 +1,6 @@
 """Tests for pdf2md.convert."""
 
+import importlib.metadata
 from pathlib import Path
 
 from pdf2md.convert import BatchSummary, ConversionResult, ConversionStatus, convert_one
@@ -45,3 +46,21 @@ def test_convert_one_creates_per_pdf_subfolder(tmp_path):
     convert_one(FIXTURE, tmp_path)
     assert (tmp_path / "sample").is_dir()
     assert (tmp_path / "sample" / "sample.md").is_file()
+
+
+def test_convert_one_writes_provenance_header(tmp_path):
+    convert_one(FIXTURE, tmp_path)
+    text = (tmp_path / "sample" / "sample.md").read_text()
+    docling_version = importlib.metadata.version("docling")
+
+    assert text.startswith("<!-- source: sample.pdf -->\n")
+    assert "<!-- pages: 2 -->\n" in text.splitlines()[1] + "\n"
+    assert f"<!-- extractor: docling {docling_version} -->\n" in text.splitlines()[2] + "\n"
+
+
+def test_convert_one_output_is_deterministic(tmp_path):
+    convert_one(FIXTURE, tmp_path / "a")
+    convert_one(FIXTURE, tmp_path / "b")
+    a = (tmp_path / "a" / "sample" / "sample.md").read_bytes()
+    b = (tmp_path / "b" / "sample" / "sample.md").read_bytes()
+    assert a == b
