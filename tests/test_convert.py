@@ -1,6 +1,7 @@
 """Tests for pdf2md.convert."""
 
 import importlib.metadata
+import shutil
 from pathlib import Path
 
 from pdf2md.convert import BatchSummary, ConversionResult, ConversionStatus, convert_one
@@ -79,3 +80,40 @@ def test_convert_one_no_images_suppresses_sidecar(tmp_path):
     # Either the artifacts folder doesn't exist, or it's empty.
     if artifacts.exists():
         assert not any(artifacts.iterdir()), f"expected no images, found {list(artifacts.iterdir())}"
+
+
+def test_convert_batch_happy_path(tmp_path):
+    in_dir = tmp_path / "in"
+    out_dir = tmp_path / "out"
+    in_dir.mkdir()
+    # Two copies of the fixture under different names.
+    shutil.copy(FIXTURE, in_dir / "doc-a.pdf")
+    shutil.copy(FIXTURE, in_dir / "doc-b.pdf")
+
+    from pdf2md.convert import convert_batch
+
+    summary = convert_batch(in_dir, out_dir)
+
+    assert summary.total == 2
+    assert summary.succeeded == 2
+    assert summary.failed == 0
+    assert summary.skipped == 0
+    assert (out_dir / "doc-a" / "doc-a.md").is_file()
+    assert (out_dir / "doc-b" / "doc-b.md").is_file()
+
+
+def test_convert_batch_non_recursive(tmp_path):
+    in_dir = tmp_path / "in"
+    out_dir = tmp_path / "out"
+    sub = in_dir / "subfolder"
+    sub.mkdir(parents=True)
+    shutil.copy(FIXTURE, in_dir / "top.pdf")
+    shutil.copy(FIXTURE, sub / "nested.pdf")
+
+    from pdf2md.convert import convert_batch
+
+    summary = convert_batch(in_dir, out_dir)
+
+    assert summary.total == 1
+    assert (out_dir / "top" / "top.md").is_file()
+    assert not (out_dir / "nested").exists()

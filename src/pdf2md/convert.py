@@ -122,3 +122,53 @@ def convert_one(
         elapsed_s=elapsed,
         error=None,
     )
+
+
+def _discover_pdfs(in_dir: Path) -> list[Path]:
+    """Non-recursive, case-insensitive *.pdf discovery, sorted by name."""
+    return sorted(p for p in in_dir.iterdir() if p.is_file() and p.suffix.lower() == ".pdf")
+
+
+def convert_batch(
+    in_dir: Path,
+    out_dir: Path,
+    *,
+    force: bool = False,
+    strict: bool = False,
+    fast_tables: bool = False,
+    with_images: bool = True,
+    on_progress: "callable | None" = None,
+) -> BatchSummary:
+    """Convert every PDF in `in_dir` (non-recursive) into `out_dir/<stem>/<stem>.md`.
+
+    `on_progress(index, total, result)` is called after each PDF (success, skip,
+    or fail) for progress display. The CLI passes a logging callback; tests pass
+    None.
+    """
+    in_dir = Path(in_dir)
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    pdfs = _discover_pdfs(in_dir)
+    results: list[ConversionResult] = []
+    started = time.monotonic()
+
+    for i, pdf in enumerate(pdfs, start=1):
+        result = convert_one(
+            pdf, out_dir, fast_tables=fast_tables, with_images=with_images
+        )
+        results.append(result)
+        if on_progress is not None:
+            on_progress(i, len(pdfs), result)
+
+    elapsed = time.monotonic() - started
+    succeeded = sum(1 for r in results if r.status == ConversionStatus.SUCCESS)
+    failed = sum(1 for r in results if r.status == ConversionStatus.FAILED)
+    skipped = sum(1 for r in results if r.status == ConversionStatus.SKIPPED)
+    return BatchSummary(
+        succeeded=succeeded,
+        failed=failed,
+        skipped=skipped,
+        elapsed_s=elapsed,
+        results=results,
+    )
