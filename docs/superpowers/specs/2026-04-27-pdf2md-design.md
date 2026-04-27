@@ -85,14 +85,14 @@ pdf-to-md-converter/
 
 ```
 outputs/<pdf-stem>/
-├── <pdf-stem>.md          # markdown body
-└── exhibits/              # all extracted images (if any)
-    ├── img-001.png
-    ├── img-002.png
+├── <pdf-stem>.md                    # markdown body
+└── <pdf-stem>_artifacts/            # all extracted images (if any)
+    ├── image_000000_<hash>.png
+    ├── image_000001_<hash>.png
     └── ...
 ```
 
-The output folder is **self-contained** — copy/zip/ship the folder and image links resolve correctly.
+The output folder is **self-contained** — copy/zip/ship the folder and image links resolve correctly. The `_artifacts/` suffix and image filenames inside it are the docling library's convention (`ImageRefMode.REFERENCED`); we accept it rather than post-processing the output to rename files and rewrite markdown image links.
 
 ### Markdown header
 
@@ -106,9 +106,9 @@ Each output `.md` begins with provenance comments (HTML comments, invisible in r
 
 **No timestamp.** Outputs must be deterministic across re-runs (same input → byte-identical output) so they are diffable in git.
 
-### Page anchors
+### Page anchors (deferred to v2)
 
-Insert `<!-- page N -->` comments between page chunks so any section can be traced back to its source PDF page. Same convention as the `fr_technical_module` repo.
+The `fr_technical_module` repo's `pdf_extract.py` inserted `<!-- page N -->` anchors between page chunks (a feature of the `pymupdf4llm` extractor). Docling's default markdown export does not emit these. Implementing them requires a custom `MarkdownDocSerializer` subclass that walks the document item-by-item and emits a comment whenever `item.prov[0].page_no` changes. This is non-trivial code that does not block the core "PDF → clean markdown" goal. Deferred to v2.
 
 ### Image references
 
