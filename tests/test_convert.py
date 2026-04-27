@@ -117,3 +117,33 @@ def test_convert_batch_non_recursive(tmp_path):
     assert summary.total == 1
     assert (out_dir / "top" / "top.md").is_file()
     assert not (out_dir / "nested").exists()
+
+
+def test_convert_batch_skips_existing(tmp_path):
+    in_dir = tmp_path / "in"
+    out_dir = tmp_path / "out"
+    in_dir.mkdir()
+    shutil.copy(FIXTURE, in_dir / "doc.pdf")
+
+    from pdf2md.convert import convert_batch
+
+    first = convert_batch(in_dir, out_dir)
+    assert first.succeeded == 1 and first.skipped == 0
+
+    second = convert_batch(in_dir, out_dir)
+    assert second.succeeded == 0 and second.skipped == 1
+    assert second.results[0].status == ConversionStatus.SKIPPED
+    assert second.results[0].error is None
+
+
+def test_convert_batch_force_overrides_skip(tmp_path):
+    in_dir = tmp_path / "in"
+    out_dir = tmp_path / "out"
+    in_dir.mkdir()
+    shutil.copy(FIXTURE, in_dir / "doc.pdf")
+
+    from pdf2md.convert import convert_batch
+
+    convert_batch(in_dir, out_dir)
+    second = convert_batch(in_dir, out_dir, force=True)
+    assert second.succeeded == 1 and second.skipped == 0

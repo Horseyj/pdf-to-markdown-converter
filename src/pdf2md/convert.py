@@ -154,9 +154,20 @@ def convert_batch(
     started = time.monotonic()
 
     for i, pdf in enumerate(pdfs, start=1):
-        result = convert_one(
-            pdf, out_dir, fast_tables=fast_tables, with_images=with_images
-        )
+        out_md = out_dir / pdf.stem / f"{pdf.stem}.md"
+        if out_md.exists() and not force:
+            result = ConversionResult(
+                source=pdf,
+                output_md=out_md,
+                status=ConversionStatus.SKIPPED,
+                n_pages=0,
+                elapsed_s=0.0,
+                error=None,
+            )
+        else:
+            result = convert_one(
+                pdf, out_dir, fast_tables=fast_tables, with_images=with_images
+            )
         results.append(result)
         if on_progress is not None:
             on_progress(i, len(pdfs), result)
