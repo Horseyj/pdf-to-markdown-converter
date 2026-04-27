@@ -147,3 +147,39 @@ def test_convert_batch_force_overrides_skip(tmp_path):
     convert_batch(in_dir, out_dir)
     second = convert_batch(in_dir, out_dir, force=True)
     assert second.succeeded == 1 and second.skipped == 0
+
+
+def test_convert_batch_isolates_errors(tmp_path):
+    in_dir = tmp_path / "in"
+    out_dir = tmp_path / "out"
+    in_dir.mkdir()
+    shutil.copy(FIXTURE, in_dir / "good.pdf")
+    # Write a non-PDF file with .pdf extension to provoke a docling error.
+    (in_dir / "broken.pdf").write_text("this is not a real PDF")
+
+    from pdf2md.convert import convert_batch
+
+    summary = convert_batch(in_dir, out_dir)
+    assert summary.total == 2
+    assert summary.succeeded == 1
+    assert summary.failed == 1
+
+    by_name = {r.source.name: r for r in summary.results}
+    assert by_name["good.pdf"].status == ConversionStatus.SUCCESS
+    assert by_name["broken.pdf"].status == ConversionStatus.FAILED
+    assert by_name["broken.pdf"].error is not None
+    assert by_name["broken.pdf"].error != ""
+
+
+def test_convert_batch_strict_raises(tmp_path):
+    import pytest
+
+    in_dir = tmp_path / "in"
+    out_dir = tmp_path / "out"
+    in_dir.mkdir()
+    (in_dir / "broken.pdf").write_text("not a PDF")
+
+    from pdf2md.convert import convert_batch
+
+    with pytest.raises(Exception):
+        convert_batch(in_dir, out_dir, strict=True)

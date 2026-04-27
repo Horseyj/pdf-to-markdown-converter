@@ -165,9 +165,21 @@ def convert_batch(
                 error=None,
             )
         else:
-            result = convert_one(
-                pdf, out_dir, fast_tables=fast_tables, with_images=with_images
-            )
+            try:
+                result = convert_one(
+                    pdf, out_dir, fast_tables=fast_tables, with_images=with_images
+                )
+            except Exception as exc:
+                if strict:
+                    raise
+                result = ConversionResult(
+                    source=pdf,
+                    output_md=out_dir / pdf.stem / f"{pdf.stem}.md",
+                    status=ConversionStatus.FAILED,
+                    n_pages=0,
+                    elapsed_s=0.0,
+                    error=f"{type(exc).__name__}: {exc}",
+                )
         results.append(result)
         if on_progress is not None:
             on_progress(i, len(pdfs), result)
