@@ -15,10 +15,12 @@ def run_cli(*args, cwd=None):
 
 
 def test_cli_version():
+    from pdf2md import __version__
+
     r = run_cli("--version")
     assert r.returncode == 0
     assert "pdf2md" in r.stdout
-    assert "0.1.0" in r.stdout
+    assert __version__ in r.stdout
 
 
 def test_cli_help():
