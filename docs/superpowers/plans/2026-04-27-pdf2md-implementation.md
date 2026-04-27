@@ -28,7 +28,7 @@ The repo has been initialized with one commit (the design spec). Run all command
 
 ```
 pdf-to-md-converter/
-├── README.md                        # Task 16
+├── README.md                        # Task 12
 ├── LICENSE                          # Task 1 (MIT)
 ├── pyproject.toml                   # Task 1
 ├── Makefile                         # Task 1

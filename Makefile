@@ -15,6 +15,7 @@ install-cpu:
 test:
 	.venv/bin/pytest -v
 
+# Zero-arg batch mode: reads ./pdfs/ and writes ./outputs/.
 convert:
 	.venv/bin/pdf2md
 
