@@ -1,12 +1,14 @@
 """Tests for pdf2md.convert."""
 
 import importlib.metadata
+import re
 import shutil
 from pathlib import Path
 
 from pdf2md.convert import BatchSummary, ConversionResult, ConversionStatus, convert_one
 
 FIXTURE = Path(__file__).parent / "fixtures" / "sample.pdf"
+FIXTURE_WITH_IMAGE = Path(__file__).parent / "fixtures" / "sample_with_image.pdf"
 
 
 def test_conversion_result_fields():
@@ -80,6 +82,43 @@ def test_convert_one_no_images_suppresses_sidecar(tmp_path):
     # Either the artifacts folder doesn't exist, or it's empty.
     if artifacts.exists():
         assert not any(artifacts.iterdir()), f"expected no images, found {list(artifacts.iterdir())}"
+
+
+def test_convert_one_image_refs_resolve(tmp_path):
+    """Regression: image refs in the produced markdown must resolve to real files
+    when interpreted relative to the markdown's parent directory.
+
+    Previously, docling's save_as_markdown was given a cwd-relative output path,
+    which caused it to both write images to a doubly-nested path AND emit broken
+    refs in the .md (refs were resolved against cwd, not the .md's parent dir).
+    """
+    convert_one(FIXTURE_WITH_IMAGE, tmp_path, with_images=True)
+    md_path = tmp_path / "sample_with_image" / "sample_with_image.md"
+    assert md_path.is_file()
+
+    text = md_path.read_text()
+    refs = re.findall(r"!\[.*?\]\(([^)]+)\)", text)
+    assert len(refs) >= 1, f"expected at least one image ref in markdown, got: {text!r}"
+
+    md_dir = md_path.parent
+    for ref in refs:
+        # Refs must be relative (portable) — not absolute system paths.
+        assert not Path(ref).is_absolute(), (
+            f"image ref {ref!r} is an absolute path; refs must be relative to "
+            f"the markdown's parent directory so the .md is portable"
+        )
+        resolved = md_dir.joinpath(ref)
+        assert resolved.is_file(), (
+            f"image ref {ref!r} does not resolve to an existing file "
+            f"(resolved to {resolved})"
+        )
+
+    # Sanity: there should be NO doubly-nested outputs/<stem>/outputs/... folder
+    nested = tmp_path / "sample_with_image" / tmp_path.name
+    assert not nested.exists(), (
+        f"unexpected nested output dir found at {nested} "
+        f"(docling wrote artifacts relative to cwd instead of the .md parent)"
+    )
 
 
 def test_convert_batch_happy_path(tmp_path):

@@ -100,7 +100,17 @@ def convert_one(
     n_pages = len(list(doc.pages))
 
     image_mode = ImageRefMode.REFERENCED if with_images else ImageRefMode.PLACEHOLDER
-    doc.save_as_markdown(out_md, image_mode=image_mode)
+    # Pass artifacts_dir as a bare relative path (just the basename, no parent).
+    # docling's _get_output_paths then sets reference_path = out_md.parent and
+    # places artifacts at out_md.parent / artifacts_dir, which (a) avoids the
+    # doubly-nested path that occurs when out_md is cwd-relative and (b) makes
+    # image refs in the produced markdown relative to the .md's parent dir,
+    # so the .md remains portable.
+    doc.save_as_markdown(
+        out_md,
+        artifacts_dir=Path(f"{stem}_artifacts"),
+        image_mode=image_mode,
+    )
 
     # Prepend provenance header. Order: source, pages, extractor.
     docling_version = importlib.metadata.version("docling")
