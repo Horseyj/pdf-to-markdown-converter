@@ -126,6 +126,15 @@ Each `.md` begins with three HTML comments recording the source filename, page c
 - Forms and structured documents are not specifically optimized for.
 - Page anchors (`<!-- page N -->` comments) are not emitted in v1; deferred to a later release.
 
+### Content artifacts you may see
+
+These are cosmetic — they don't degrade the document's information content and LLM consumers handle them fine — but humans skimming the markdown will notice:
+
+- **Long dash-only lines** in PDFs that use comparison tables: docling renders empty cell borders as 60–130 character dash runs.
+- **Renumbered lists** when the source PDF has multiple separate numbered lists in close proximity: docling sometimes merges them into one continuous sequence.
+- **Letter-spacing collapse in headings** (e.g. `PROFESSIONALEXPERIENCE` or `P ROFES SION AL E X PERIENCE`): PDFs that style headings via per-character tracking lose word boundaries during text extraction.
+- **OCR errors on bitmap-image pages** (scanned resumes, screenshots embedded in the PDF): single-character mistakes through to entirely garbled lines, depending on scan resolution. Born-digital text is unaffected.
+
 ## License
 
 MIT. See `LICENSE`.

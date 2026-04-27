@@ -7,7 +7,9 @@ is importable as a library.
 
 from __future__ import annotations
 
+import hashlib
 import importlib.metadata
+import re
 import time
 from dataclasses import dataclass, field
 from enum import Enum
@@ -80,10 +82,15 @@ def convert_one(
     *,
     fast_tables: bool = False,
     with_images: bool = True,
+    converter: DocumentConverter | None = None,
 ) -> ConversionResult:
     """Convert a single PDF to markdown.
 
     Output layout: <output_root>/<stem>/<stem>.md (+ optional <stem>_artifacts/).
+
+    Pass `converter` to reuse a pre-built `DocumentConverter` across many calls
+    (the batch driver does this — it avoids reloading the OCR/layout models per
+    PDF, which is both slow and the cause of process-wide memory growth).
     """
     source = Path(source)
     output_root = Path(output_root)
@@ -94,7 +101,8 @@ def convert_one(
     out_dir.mkdir(parents=True, exist_ok=True)
 
     started = time.monotonic()
-    converter = _make_converter(fast_tables=fast_tables, with_images=with_images)
+    if converter is None:
+        converter = _make_converter(fast_tables=fast_tables, with_images=with_images)
     result = converter.convert(source)
     doc = result.document
     n_pages = len(list(doc.pages))
@@ -123,6 +131,9 @@ def convert_one(
     body = out_md.read_text()
     out_md.write_text(header + body)
 
+    if with_images:
+        _prune_repeated_images(out_md)
+
     elapsed = time.monotonic() - started
     return ConversionResult(
         source=source,
@@ -132,6 +143,64 @@ def convert_one(
         elapsed_s=elapsed,
         error=None,
     )
+
+
+_IMAGE_REF_RE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
+
+
+def _prune_repeated_images(md_path: Path, *, min_repetitions: int = 3) -> int:
+    """Drop image references whose underlying file content recurs `min_repetitions`
+    or more times — these are page chrome (footers, dividers, decorative icons)
+    that add visual noise without information.
+
+    Identity is content hash, not filename, because docling assigns each extracted
+    image a unique numbered filename even when the bytes are identical. Refs that
+    point outside the markdown's directory or to missing files are left untouched.
+
+    Returns the number of ref lines removed.
+    """
+    text = md_path.read_text()
+    md_dir = md_path.parent
+
+    hash_by_relpath: dict[str, str] = {}
+    refs_per_hash: dict[str, int] = {}
+    for match in _IMAGE_REF_RE.finditer(text):
+        relpath = match.group(1)
+        if relpath in hash_by_relpath:
+            refs_per_hash[hash_by_relpath[relpath]] += 1
+            continue
+        target = md_dir / relpath
+        if not target.is_file():
+            continue
+        digest = hashlib.sha256(target.read_bytes()).hexdigest()
+        hash_by_relpath[relpath] = digest
+        refs_per_hash[digest] = refs_per_hash.get(digest, 0) + 1
+
+    decorative_hashes = {h for h, n in refs_per_hash.items() if n >= min_repetitions}
+    if not decorative_hashes:
+        return 0
+
+    decorative_relpaths = {
+        rp for rp, h in hash_by_relpath.items() if h in decorative_hashes
+    }
+
+    def _is_decorative_line(line: str) -> bool:
+        stripped = line.strip()
+        m = _IMAGE_REF_RE.fullmatch(stripped)
+        return m is not None and m.group(1) in decorative_relpaths
+
+    kept_lines = [ln for ln in text.splitlines(keepends=True) if not _is_decorative_line(ln)]
+    pruned = len(text.splitlines(keepends=True)) - len(kept_lines)
+    md_path.write_text("".join(kept_lines))
+
+    for rp in decorative_relpaths:
+        target = md_dir / rp
+        try:
+            target.unlink()
+        except FileNotFoundError:
+            pass
+
+    return pruned
 
 
 def _discover_pdfs(in_dir: Path) -> list[Path]:
@@ -163,6 +232,13 @@ def convert_batch(
     results: list[ConversionResult] = []
     started = time.monotonic()
 
+    # Build the converter once and reuse it for the whole batch. Re-creating it
+    # per PDF accumulates ~hundreds of MB of model state across iterations
+    # because Python/PyTorch don't release the previous instance promptly,
+    # which has OOM-killed long batches on machines with 16GB RAM. Reuse also
+    # eliminates the multi-second model-load phase from every iteration.
+    converter: DocumentConverter | None = None
+
     for i, pdf in enumerate(pdfs, start=1):
         out_md = out_dir / pdf.stem / f"{pdf.stem}.md"
         if out_md.exists() and not force:
@@ -175,9 +251,15 @@ def convert_batch(
                 error=None,
             )
         else:
+            if converter is None:
+                converter = _make_converter(fast_tables=fast_tables, with_images=with_images)
             try:
                 result = convert_one(
-                    pdf, out_dir, fast_tables=fast_tables, with_images=with_images
+                    pdf,
+                    out_dir,
+                    fast_tables=fast_tables,
+                    with_images=with_images,
+                    converter=converter,
                 )
             except Exception as exc:
                 if strict:
