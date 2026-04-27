@@ -5,7 +5,13 @@ import re
 import shutil
 from pathlib import Path
 
-from pdf2md.convert import BatchSummary, ConversionResult, ConversionStatus, convert_one
+from pdf2md.convert import (
+    BatchSummary,
+    ConversionResult,
+    ConversionStatus,
+    _prune_repeated_images,
+    convert_one,
+)
 
 FIXTURE = Path(__file__).parent / "fixtures" / "sample.pdf"
 FIXTURE_WITH_IMAGE = Path(__file__).parent / "fixtures" / "sample_with_image.pdf"
@@ -208,6 +214,119 @@ def test_convert_batch_isolates_errors(tmp_path):
     assert by_name["broken.pdf"].status == ConversionStatus.FAILED
     assert by_name["broken.pdf"].error is not None
     assert by_name["broken.pdf"].error != ""
+
+
+def _make_image_files(art_dir: Path, mapping: dict[str, bytes]) -> None:
+    art_dir.mkdir(parents=True, exist_ok=True)
+    for name, content in mapping.items():
+        (art_dir / name).write_bytes(content)
+
+
+def test_prune_drops_refs_to_recurring_image_content(tmp_path):
+    """Images whose bytes recur >= 3 times are page chrome — refs and files go."""
+    md = tmp_path / "doc.md"
+    art = tmp_path / "doc_artifacts"
+    chrome = b"\x89PNG\r\n\x1a\n" + b"chrome-bytes" * 10
+    real = b"\x89PNG\r\n\x1a\n" + b"real-content-bytes" * 10
+    _make_image_files(
+        art,
+        {
+            "image_001_a.png": chrome,
+            "image_002_b.png": chrome,
+            "image_003_c.png": chrome,
+            "image_004_d.png": real,
+        },
+    )
+    md.write_text(
+        "# Title\n\n"
+        "Para 1.\n\n"
+        "![Image](doc_artifacts/image_001_a.png)\n\n"
+        "Para 2.\n\n"
+        "![Image](doc_artifacts/image_002_b.png)\n\n"
+        "![Image](doc_artifacts/image_004_d.png)\n\n"
+        "Para 3.\n\n"
+        "![Image](doc_artifacts/image_003_c.png)\n"
+    )
+
+    pruned = _prune_repeated_images(md)
+
+    assert pruned == 3
+    out = md.read_text()
+    assert "image_001_a.png" not in out
+    assert "image_002_b.png" not in out
+    assert "image_003_c.png" not in out
+    assert "image_004_d.png" in out
+    assert not (art / "image_001_a.png").exists()
+    assert not (art / "image_002_b.png").exists()
+    assert not (art / "image_003_c.png").exists()
+    assert (art / "image_004_d.png").exists()
+    # Body prose untouched.
+    assert "Para 1." in out and "Para 2." in out and "Para 3." in out
+
+
+def test_prune_keeps_images_below_threshold(tmp_path):
+    """An image appearing 1 or 2 times stays — only 3+ recurrences are dropped."""
+    md = tmp_path / "doc.md"
+    art = tmp_path / "doc_artifacts"
+    twice = b"twice-content-bytes" * 50
+    once = b"once-content-bytes" * 50
+    _make_image_files(art, {"image_001_a.png": twice, "image_002_b.png": twice, "image_003_c.png": once})
+    md.write_text(
+        "![Image](doc_artifacts/image_001_a.png)\n\n"
+        "![Image](doc_artifacts/image_002_b.png)\n\n"
+        "![Image](doc_artifacts/image_003_c.png)\n"
+    )
+
+    pruned = _prune_repeated_images(md)
+
+    assert pruned == 0
+    out = md.read_text()
+    assert "image_001_a.png" in out
+    assert "image_002_b.png" in out
+    assert "image_003_c.png" in out
+
+
+def test_prune_handles_missing_referenced_files(tmp_path):
+    """Refs to missing files (e.g. external URLs) are left alone, not crashed on."""
+    md = tmp_path / "doc.md"
+    md.write_text("![alt](https://example.com/x.png)\n\nbody\n")
+
+    pruned = _prune_repeated_images(md)
+
+    assert pruned == 0
+    assert "https://example.com/x.png" in md.read_text()
+
+
+def test_convert_batch_reuses_single_converter(tmp_path, monkeypatch):
+    """Regression: a batch of N PDFs must instantiate the heavy DocumentConverter
+    exactly once. Re-creating it per PDF accumulates model state until the OS
+    OOM-kills long batches.
+    """
+    import pdf2md.convert as conv
+
+    in_dir = tmp_path / "in"
+    out_dir = tmp_path / "out"
+    in_dir.mkdir()
+    shutil.copy(FIXTURE, in_dir / "doc-a.pdf")
+    shutil.copy(FIXTURE, in_dir / "doc-b.pdf")
+    shutil.copy(FIXTURE, in_dir / "doc-c.pdf")
+
+    real_make_converter = conv._make_converter
+    calls = {"n": 0}
+
+    def counting_make_converter(*args, **kwargs):
+        calls["n"] += 1
+        return real_make_converter(*args, **kwargs)
+
+    monkeypatch.setattr(conv, "_make_converter", counting_make_converter)
+
+    summary = conv.convert_batch(in_dir, out_dir)
+
+    assert summary.succeeded == 3
+    assert calls["n"] == 1, (
+        f"_make_converter was called {calls['n']} times for 3 PDFs; "
+        "expected 1 (single shared converter for the whole batch)"
+    )
 
 
 def test_convert_batch_strict_raises(tmp_path):
