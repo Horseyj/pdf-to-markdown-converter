@@ -83,3 +83,39 @@ def test_cli_exit_code_on_failure(tmp_path):
 def test_cli_exit_code_on_invocation_error(tmp_path):
     r = run_cli("--in", str(tmp_path / "does-not-exist"), "--out", str(tmp_path / "out"))
     assert r.returncode == 2
+
+
+def test_cli_postprocess_only_on_single_file(tmp_path):
+    md = tmp_path / "doc.md"
+    md.write_text(
+        "## Contents\n\n"
+        "## Orphan\n\n"
+        "## Real\n\n"
+        + ("Long paragraph content. " * 12)
+        + "\n"
+    )
+
+    r = run_cli("--postprocess-only", str(md))
+    assert r.returncode == 0, r.stderr
+    out = md.read_text()
+    assert "## Contents" not in out
+    assert "## Real" in out
+    assert "doc.md" in r.stdout
+
+
+def test_cli_postprocess_only_on_directory(tmp_path):
+    (tmp_path / "a.md").write_text("Body with &amp; entity. " * 20)
+    (tmp_path / "b.md").write_text("Body with &gt; entity. " * 20)
+    (tmp_path / "ignore.txt").write_text("not markdown")
+
+    r = run_cli("--postprocess-only", str(tmp_path))
+    assert r.returncode == 0, r.stderr
+    assert "&amp;" not in (tmp_path / "a.md").read_text()
+    assert "&gt;" not in (tmp_path / "b.md").read_text()
+    # .txt file untouched.
+    assert (tmp_path / "ignore.txt").read_text() == "not markdown"
+
+
+def test_cli_postprocess_only_path_missing(tmp_path):
+    r = run_cli("--postprocess-only", str(tmp_path / "nope"))
+    assert r.returncode == 2

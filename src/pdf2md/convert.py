@@ -25,6 +25,8 @@ from docling.datamodel.pipeline_options import (
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling_core.types.doc import ImageRefMode
 
+from pdf2md.postprocess import postprocess
+
 
 class ConversionStatus(str, Enum):
     SUCCESS = "success"
@@ -133,6 +135,13 @@ def convert_one(
 
     if with_images:
         _prune_repeated_images(out_md)
+
+    # Post-process the markdown text in-place: decode HTML entities, remove
+    # any extracted table-of-contents region, and demote paragraph fragments
+    # mis-tagged as h2s. See pdf2md.postprocess for the heuristics and the
+    # conservative-by-default rationale.
+    cleaned, _ = postprocess(out_md.read_text())
+    out_md.write_text(cleaned)
 
     elapsed = time.monotonic() - started
     return ConversionResult(

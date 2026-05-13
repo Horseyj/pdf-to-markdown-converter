@@ -67,6 +67,19 @@ def test_convert_one_writes_provenance_header(tmp_path):
     assert f"<!-- extractor: docling {docling_version} -->\n" in text.splitlines()[2] + "\n"
 
 
+def test_convert_one_runs_postprocess(tmp_path):
+    """Regression: HTML entities must be decoded in the produced .md, proving
+    the postprocess pass was wired into convert_one (not just left as a library
+    function)."""
+    convert_one(FIXTURE, tmp_path)
+    text = (tmp_path / "sample" / "sample.md").read_text()
+    # The sample PDF text contains ampersands; docling emits them as &amp;.
+    # After postprocess they must be decoded.
+    assert "&amp;" not in text
+    assert "&gt;" not in text
+    assert "&lt;" not in text
+
+
 def test_convert_one_output_is_deterministic(tmp_path):
     convert_one(FIXTURE, tmp_path / "a")
     convert_one(FIXTURE, tmp_path / "b")
