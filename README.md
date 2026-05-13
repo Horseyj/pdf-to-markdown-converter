@@ -86,15 +86,17 @@ Positional:
                   Omit for batch mode using --in (default ./pdfs).
 
 Options:
-  --in DIR        Batch input directory (default: ./pdfs)
-  --out DIR       Output directory (default: ./outputs)
-  --force         Re-convert even if output already exists
-  --fast          Use FAST table mode instead of ACCURATE (faster, less precise)
-  --no-images     Skip image extraction
-  --strict        Fail-fast on first error (for CI)
-  -v, --verbose   Verbose logging
-  --version       Print version and exit
-  -h, --help      Show help
+  --in DIR              Batch input directory (default: ./pdfs)
+  --out DIR             Output directory (default: ./outputs)
+  --force               Re-convert even if output already exists
+  --fast                Use FAST table mode instead of ACCURATE (faster, less precise)
+  --no-images           Skip image extraction
+  --strict              Fail-fast on first error (for CI)
+  --postprocess-only P  Re-run only the markdown post-processing pass on an
+                        existing .md file or directory (rewrites in place)
+  -v, --verbose         Verbose logging
+  --version             Print version and exit
+  -h, --help            Show help
 ```
 
 ## Output structure
@@ -134,6 +136,32 @@ These are cosmetic — they don't degrade the document's information content and
 - **Renumbered lists** when the source PDF has multiple separate numbered lists in close proximity: docling sometimes merges them into one continuous sequence.
 - **Letter-spacing collapse in headings** (e.g. `PROFESSIONALEXPERIENCE` or `P ROFES SION AL E X PERIENCE`): PDFs that style headings via per-character tracking lose word boundaries during text extraction.
 - **OCR errors on bitmap-image pages** (scanned resumes, screenshots embedded in the PDF): single-character mistakes through to entirely garbled lines, depending on scan resolution. Born-digital text is unaffected.
+
+## Markdown post-processing
+
+Every conversion runs a post-processing pass over the extracted markdown to clean three noise patterns that docling consistently produces. The pass is pure text-in / text-out (it does not re-run extraction), idempotent, and conservative — when in doubt it leaves content alone rather than risk deletion.
+
+**What it cleans:**
+
+- **HTML entities** decoded via `html.unescape` — `&amp;`, `&gt;`, `&lt;`, `&quot;`, `&#39;`, `&nbsp;` and others become their characters.
+- **Table-of-contents region** — when a `## Contents` (or `## Table of Contents`) heading is present, the TOC heading and the orphan h2 sub-entries that follow are deleted up to (but not including) the first h2 with prose-like body content. If no following prose section can be identified, the document is left untouched.
+- **Heading-explosion fragments** — h2s that look like paragraph fragments are *demoted* (the `## ` prefix is stripped; the text survives as a paragraph). Five subtypes are caught: ellipsis-trailing sentence lead-ins, overlong headings (>120 chars), label-form headings (ending with `:` followed by a bullet/numbered list), layout-artifact h2s (body shorter than 50 non-image chars), and cover-page chrome (caught by the layout rule).
+
+Demotion (rather than deletion) is the conservative default — if a heuristic fires on a real heading, the text is still present for human readers and downstream retrieval; only its role as a section anchor is removed.
+
+### Re-running on already-extracted output
+
+The post-processing pass also runs as a standalone command, so you can clean an existing `outputs/` tree without re-extracting PDFs (which is OCR-bound and slow). It rewrites files in place.
+
+```bash
+# Single file
+pdf2md --postprocess-only outputs/MyDoc/MyDoc.md
+
+# Directory — walked recursively for *.md files
+pdf2md --postprocess-only outputs/
+```
+
+A one-line summary per file is printed to stdout, e.g. `MyDoc.md: TOC removed (1 region), 23 headings demoted, 41 entities decoded`.
 
 ## License
 

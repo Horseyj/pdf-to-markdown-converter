@@ -14,6 +14,7 @@ from pdf2md.convert import (
     convert_batch,
     convert_one,
 )
+from pdf2md.postprocess import postprocess
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -42,6 +43,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-images", dest="with_images", action="store_false", help="Skip image extraction")
     parser.add_argument("--strict", action="store_true", help="Fail-fast on first error (for CI)")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose logging")
+    parser.add_argument(
+        "--postprocess-only",
+        metavar="PATH",
+        help=(
+            "Skip PDF conversion; re-run the markdown postprocessing pass on "
+            "an existing .md file or directory (walked recursively for *.md). "
+            "Files are rewritten in place."
+        ),
+    )
     parser.add_argument("--version", action="version", version=f"pdf2md {__version__}")
     return parser
 
@@ -69,9 +79,38 @@ def _print_summary(summary: BatchSummary, out_dir: Path) -> None:
     print(f"Output: {out_dir}/")
 
 
+def _run_postprocess_only(path: Path) -> int:
+    """Re-run the postprocess pass over a .md file or a directory of .md files.
+
+    Files are rewritten in place. Returns the CLI exit code (0 success,
+    2 invocation error).
+    """
+    if not path.exists():
+        print(f"pdf2md: path not found: {path}", file=sys.stderr)
+        return 2
+
+    if path.is_file():
+        targets = [path]
+    else:
+        targets = sorted(path.rglob("*.md"))
+
+    if not targets:
+        print(f"pdf2md: no .md files found at {path}", file=sys.stderr)
+        return 2
+
+    for md in targets:
+        new_text, stats = postprocess(md.read_text())
+        md.write_text(new_text)
+        print(f"{md.name}: {stats.summary()}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    if args.postprocess_only:
+        return _run_postprocess_only(Path(args.postprocess_only))
 
     out_dir = Path(args.out_dir)
 
