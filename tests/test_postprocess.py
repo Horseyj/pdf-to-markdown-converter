@@ -5,6 +5,7 @@ from __future__ import annotations
 from pdf2md.postprocess import (
     LAYOUT_ARTIFACT_BODY_THRESHOLD,
     MAX_HEADING_CHARS,
+    MAX_NUMBERED_STEP_TEXT_CHARS,
     PostprocessStats,
     decode_html_entities,
     demote_fragment_headings,
@@ -447,6 +448,119 @@ def test_demote_unicode_and_emoji_in_heading():
     out, counts = demote_fragment_headings(text)
     assert counts["ellipsis"] == 1
     assert "📋 Schritte überprüfen…" in out
+
+
+# --- numbered-step subtype ---------------------------------------------------
+
+
+def test_demote_numbered_step_short_text():
+    """A `## 1. Innovation`-style step label gets demoted, even with substantive body."""
+    text = (
+        "## 1. Innovation\n\n"
+        + ("Innovation matters because of XYZ. " * 30) + "\n"
+    )
+    out, counts = demote_fragment_headings(text)
+    assert counts["numbered_step"] == 1
+    assert "## 1. Innovation" not in out
+    assert "1. Innovation" in out
+
+
+def test_demote_numbered_step_full_sentence():
+    """A numbered-step with a full sentence under threshold gets demoted."""
+    text = (
+        "## 1. Reaffirm your commitment to finance.\n\n"
+        + ("Step content paragraph here. " * 30) + "\n"
+    )
+    _, counts = demote_fragment_headings(text)
+    assert counts["numbered_step"] == 1
+
+
+def test_demote_numbered_step_bare_number():
+    """A bare `## 3.` is unambiguous noise — demote regardless of body length."""
+    text = (
+        "## 3.\n\n"
+        + ("Body text that is well over fifty chars so layout-artifact "
+           "doesn't fire — we want to ensure numbered_step specifically "
+           "claims this demotion.")
+        + "\n"
+    )
+    out, counts = demote_fragment_headings(text)
+    assert counts["numbered_step"] == 1
+    assert counts["layout"] == 0
+    assert "## 3." not in out
+    assert "3." in out  # text survives
+
+
+def test_demote_numbered_step_at_threshold_boundary():
+    """A heading exactly at MAX_NUMBERED_STEP_TEXT_CHARS still demotes; one over does not."""
+    at_limit = "X" * MAX_NUMBERED_STEP_TEXT_CHARS
+    over_limit = "X" * (MAX_NUMBERED_STEP_TEXT_CHARS + 1)
+    body = ("Body that crosses the layout threshold so we isolate the "
+            "numbered-step decision from the layout-artifact check.") + "\n"
+
+    text_at = f"## 1. {at_limit}\n\n{body}"
+    _, counts_at = demote_fragment_headings(text_at)
+    assert counts_at["numbered_step"] == 1
+
+    text_over = f"## 1. {over_limit}\n\n{body}"
+    _, counts_over = demote_fragment_headings(text_over)
+    assert counts_over["numbered_step"] == 0
+
+
+def test_numbered_step_section_anchor_with_letter_not_demoted():
+    """Real subsection patterns like `## 4.A: ...` lack whitespace after the
+    period and must NOT match the numbered-step rule."""
+    text = (
+        "## 4.A: Firm- and Group-Specific Adjustments\n\n"
+        + ("Adjustment context paragraph. " * 30) + "\n"
+        "## 11.C: 4 Credible Reasons for Choosing Sales & Trading\n\n"
+        + ("Reasons content paragraph. " * 30) + "\n"
+    )
+    out, counts = demote_fragment_headings(text)
+    assert counts["numbered_step"] == 0
+    assert "## 4.A: Firm- and Group-Specific Adjustments" in out
+    assert "## 11.C: 4 Credible Reasons for Choosing Sales & Trading" in out
+
+
+def test_numbered_step_ranks_before_layout():
+    """A numbered-step with empty body should attribute to numbered_step,
+    not layout — order in the chain matters for stats."""
+    text = (
+        "## 1. Short Step\n\n"  # empty body would otherwise be 3e layout
+        "## Next\n\n"
+        + ("Body text long enough to keep Next out of any demote bucket. " * 5)
+        + "\n"
+    )
+    _, counts = demote_fragment_headings(text)
+    assert counts["numbered_step"] == 1
+    assert counts["layout"] == 0
+
+
+def test_numbered_step_in_postprocess_stats():
+    """End-to-end: numbered-step demotions surface in stats."""
+    text = (
+        "## 1. Reaffirm your commitment to finance.\n\n"
+        + ("Step body. " * 30) + "\n\n"
+        "## 2. Show your engagement.\n\n"
+        + ("Step body. " * 30) + "\n\n"
+        "## Real Section\n\n"
+        + ("Real content paragraph. " * 30) + "\n"
+    )
+    _, stats = postprocess(text)
+    assert stats.headings_demoted_numbered_step == 2
+    assert stats.total_headings_demoted == 2
+
+
+def test_numbered_step_idempotent():
+    """After demotion, the plain-text line `1. Foo` must not re-match the h2 regex."""
+    text = (
+        "## 1. First step text here.\n\n"
+        + ("Body content. " * 25) + "\n"
+    )
+    once, _ = postprocess(text)
+    twice, counts_second = postprocess(once)
+    assert once == twice
+    assert counts_second.headings_demoted_numbered_step == 0
 
 
 # --- postprocess (integration) -----------------------------------------------

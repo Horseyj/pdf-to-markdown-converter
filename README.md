@@ -145,7 +145,13 @@ Every conversion runs a post-processing pass over the extracted markdown to clea
 
 - **HTML entities** decoded via `html.unescape` — `&amp;`, `&gt;`, `&lt;`, `&quot;`, `&#39;`, `&nbsp;` and others become their characters.
 - **Table-of-contents region** — when a `## Contents` (or `## Table of Contents`) heading is present, the TOC heading and the orphan h2 sub-entries that follow are deleted up to (but not including) the first h2 with prose-like body content. If no following prose section can be identified, the document is left untouched.
-- **Heading-explosion fragments** — h2s that look like paragraph fragments are *demoted* (the `## ` prefix is stripped; the text survives as a paragraph). Five subtypes are caught: ellipsis-trailing sentence lead-ins, overlong headings (>120 chars), label-form headings (ending with `:` followed by a bullet/numbered list), layout-artifact h2s (body shorter than 50 non-image chars), and cover-page chrome (caught by the layout rule).
+- **Heading-explosion fragments** — h2s that look like paragraph fragments are *demoted* (the `## ` prefix is stripped; the text survives as a paragraph). Six subtypes are caught:
+  - ellipsis-trailing sentence lead-ins (`## A candidate's…`),
+  - overlong headings (>120 chars),
+  - label-form headings (ending with `:` followed by a bullet/numbered list),
+  - numbered-step labels (`## 1. Reaffirm your commitment.`, with the text after the leading digit no longer than 80 chars — section anchors like `## 4.A:` are NOT matched because they lack whitespace after the period),
+  - layout-artifact h2s (body shorter than 50 non-image chars),
+  - cover-page chrome (caught by the layout rule).
 
 Demotion (rather than deletion) is the conservative default — if a heuristic fires on a real heading, the text is still present for human readers and downstream retrieval; only its role as a section anchor is removed.
 

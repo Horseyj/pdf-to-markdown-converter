@@ -8,7 +8,10 @@ PDFs this tool targets. Three noise sources show up consistently:
 2. **Table of contents** is extracted as its own section, so every entry
    appears twice — once in the TOC, once at the real section later.
 3. **Heading explosion** — docling's layout model classifies many paragraph
-   fragments as h2s, polluting the section structure.
+   fragments as h2s, polluting the section structure. Five subtypes covered:
+   ellipsis-trailing, overlong, label-form (colon + list body),
+   numbered-step (``1. Reaffirm…``), and layout-artifact / cover-chrome
+   (empty body). See :func:`demote_fragment_headings`.
 
 This module cleans all three. It operates on already-extracted markdown
 text — pure ``str -> str`` (with stats), no I/O. The CLI/script layer is
@@ -62,6 +65,14 @@ sections like a long checklist."""
 PROSE_MIN_BODY_LINES = 3
 """Companion to PROSE_TOTAL_CHARS_THRESHOLD."""
 
+MAX_NUMBERED_STEP_TEXT_CHARS = 80
+"""An h2 like ``## 1. Reaffirm your commitment.`` is a step label, not a
+section anchor. Threshold applies to the heading text AFTER the leading
+``<digit>. ``. A real numbered subsection with a longer title (e.g.
+``## 1. Setting up multi-factor authentication for production tenants``)
+would exceed this and survive. Set generously based on observed step
+labels topping out around 60 chars in the FR Consulting corpus."""
+
 
 # --- Regexes -----------------------------------------------------------------
 
@@ -89,6 +100,13 @@ _TOC_HEADING_RE = re.compile(
 )
 """Match `## Contents` or `## Table of Contents` (case-insensitive)."""
 
+_NUMBERED_STEP_RE = re.compile(r"^\d+\.(?:\s+(.+))?$")
+"""Match a numbered-step heading like ``1. Reaffirm your commitment.`` or a
+bare ``3.`` Group 1 is the text after ``<digit>. `` (None if bare).
+
+Crucially does NOT match ``1.A:`` or ``4.B:``-style real subsections — those
+have no whitespace between the period and the next character."""
+
 
 # --- Stats -------------------------------------------------------------------
 
@@ -102,6 +120,7 @@ class PostprocessStats:
     headings_demoted_ellipsis: int = 0
     headings_demoted_overlong: int = 0
     headings_demoted_label: int = 0
+    headings_demoted_numbered_step: int = 0
     headings_demoted_layout: int = 0
 
     @property
@@ -110,6 +129,7 @@ class PostprocessStats:
             self.headings_demoted_ellipsis
             + self.headings_demoted_overlong
             + self.headings_demoted_label
+            + self.headings_demoted_numbered_step
             + self.headings_demoted_layout
         )
 
@@ -285,6 +305,32 @@ def _is_label_form(heading_text: str, body: list[str]) -> bool:
     return False
 
 
+def _is_numbered_step(heading_text: str) -> bool:
+    """Heading is a numbered-step label like ``1. Reaffirm your commitment.``
+
+    Triggers when:
+
+    - the heading is a bare ``<digit>.`` (no text after) — definitely noise, or
+    - the heading matches ``<digit>. <text>`` AND ``text`` is no longer than
+      :data:`MAX_NUMBERED_STEP_TEXT_CHARS`.
+
+    Safely excludes section-anchor patterns like ``4.A:`` and ``11.C:`` — those
+    have no whitespace between the period and the next character, so the regex
+    never matches.
+
+    Example: ``## 1. Innovation`` (step label) → True;
+    ``## 4.A: Firm- and Group-Specific Adjustments`` (real subsection) →
+    False (no space after the period).
+    """
+    m = _NUMBERED_STEP_RE.match(heading_text)
+    if m is None:
+        return False
+    text_after = m.group(1)
+    if text_after is None:
+        return True  # bare "3." — definitely noise
+    return len(text_after) <= MAX_NUMBERED_STEP_TEXT_CHARS
+
+
 def _is_layout_artifact(body: list[str]) -> bool:
     """Body is essentially empty after excluding images and blank lines.
 
@@ -302,19 +348,21 @@ def _is_layout_artifact(body: list[str]) -> bool:
 def demote_fragment_headings(text: str) -> tuple[str, dict[str, int]]:
     """Demote h2s that look like paragraph fragments to plain paragraph lines.
 
-    Five documented subtypes (see brief):
+    Six documented subtypes:
 
-    * **3a ellipsis**  — heading ends with `…` or `...`. Sentence lead-in
+    * **3a ellipsis**     — heading ends with `…` or `...`. Sentence lead-in
       to a bullet list, e.g. ``## Behavioral Questions evaluate a candidate's…``
-    * **3b overlong**  — heading text > MAX_HEADING_CHARS. Paragraph
+    * **3b overlong**     — heading text > MAX_HEADING_CHARS. Paragraph
       mis-tagged as a title.
-    * **3c label**     — ends with `:`, body's first non-blank line is a
+    * **3c label**        — ends with `:`, body's first non-blank line is a
       list item. E.g. ``## Strong reasons to include:`` followed by bullets.
-    * **3d layout**    — body has < LAYOUT_ARTIFACT_BODY_THRESHOLD chars
-      after excluding images. Covers both empty h2s ("## Why this City?"
-      with no body because the next h2 follows immediately) and cover-page
-      chrome.
-    * **3e cover chrome** — caught by 3d, no separate rule.
+    * **3d numbered**     — heading matches ``<digit>. <short text>`` or a
+      bare ``<digit>.``. Numbered-step labels in a how-to list, e.g.
+      ``## 1. Reaffirm your commitment to finance.`` Real subsections like
+      ``## 4.A:`` are NOT matched (no whitespace between period and ``A``).
+    * **3e layout**       — body has < LAYOUT_ARTIFACT_BODY_THRESHOLD chars
+      after excluding images. Covers both empty h2s and cover-page chrome.
+    * **3f cover chrome** — caught by 3e, no separate rule.
 
     Demotion strips the ``## `` prefix. The text survives as a paragraph,
     so retrieval-time downstream consumers still see it; it just stops
@@ -327,6 +375,7 @@ def demote_fragment_headings(text: str) -> tuple[str, dict[str, int]]:
         "ellipsis": 0,
         "overlong": 0,
         "label": 0,
+        "numbered_step": 0,
         "layout": 0,
     }
     if not lines:
@@ -351,7 +400,10 @@ def demote_fragment_headings(text: str) -> tuple[str, dict[str, int]]:
 
         # Order of checks matters for stats accounting only — a heading is
         # demoted once. We attribute it to the FIRST matching subtype, in
-        # the order documented in the brief.
+        # the order documented above. Numbered-step is checked before layout
+        # because numbered steps usually have a prose body (so wouldn't be
+        # caught by the empty-body layout check) — keeping it earlier gives
+        # the correct stats attribution.
         subtype: str | None = None
         if _ends_with_ellipsis(heading_text):
             subtype = "ellipsis"
@@ -359,6 +411,8 @@ def demote_fragment_headings(text: str) -> tuple[str, dict[str, int]]:
             subtype = "overlong"
         elif _is_label_form(heading_text, body):
             subtype = "label"
+        elif _is_numbered_step(heading_text):
+            subtype = "numbered_step"
         elif _is_layout_artifact(body):
             subtype = "layout"
 
@@ -394,6 +448,7 @@ def postprocess(text: str) -> tuple[str, PostprocessStats]:
     stats.headings_demoted_ellipsis = subtype_counts["ellipsis"]
     stats.headings_demoted_overlong = subtype_counts["overlong"]
     stats.headings_demoted_label = subtype_counts["label"]
+    stats.headings_demoted_numbered_step = subtype_counts["numbered_step"]
     stats.headings_demoted_layout = subtype_counts["layout"]
 
     return text, stats
